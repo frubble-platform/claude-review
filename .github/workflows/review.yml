@@ -468,7 +468,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      checks: write
     env:
       PR: ${{ needs.gate.outputs.number }}
       BASE_SHA: ${{ needs.gate.outputs.base_sha }}
