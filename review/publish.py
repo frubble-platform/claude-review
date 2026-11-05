@@ -35,6 +35,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 MARKER = "<!-- claude-review -->"
 VERDICT_MARKER = "<!-- claude-review-verdict -->"
@@ -57,11 +58,31 @@ API = f"repos/{REPO}/pulls/{PR}"
 
 def still_head():
     """Stops the run when the pull request has moved past the commit this run reviewed."""
-    done = subprocess.run(["gh", "api", API, "--jq", ".head.sha"], capture_output=True, text=True)
+    done = run_gh(["gh", "api", API, "--jq", ".head.sha"])
     live = done.stdout.strip()
     if done.returncode != 0 or live != HEAD:
         sys.exit(f"the pull request's head is now {live[:7] or 'unknown'}, not {HEAD[:7]}: this run is "
                  "superseded, so it writes nothing more")
+
+
+# GitHub answers a few calls with a server error or a timeout now and then; one of those must
+# not fail a whole review. A 5xx, a timeout or a dropped connection is retried, with a pause; a
+# 4xx means the request itself is wrong, and fails at once.
+TRANSIENT = ("HTTP 500", "HTTP 502", "HTTP 503", "HTTP 504", "timeout", "Timeout", "connection reset",
+             "EOF", "TLS handshake")
+TRIES = 4
+
+
+def run_gh(cmd, stdin=None):
+    """Runs a `gh` command, retrying it while it fails the transient way."""
+    for attempt in range(1, TRIES + 1):
+        done = subprocess.run(cmd, input=stdin, capture_output=True, text=True)
+        if done.returncode == 0 or attempt == TRIES or not any(t in done.stderr for t in TRANSIENT):
+            return done
+        wait = 5 * attempt
+        print(f"gh: {done.stderr.strip()[:120]} — retrying in {wait}s ({attempt}/{TRIES - 1})")
+        time.sleep(wait)
+    return done
 
 
 def gh(*args, payload=None, check=True):
@@ -76,12 +97,7 @@ def gh(*args, payload=None, check=True):
     cmd = ["gh", "api", *args]
     if payload is not None:
         cmd += ["--input", "-"]
-    done = subprocess.run(
-        cmd,
-        input=None if payload is None else json.dumps(payload),
-        capture_output=True,
-        text=True,
-    )
+    done = run_gh(cmd, None if payload is None else json.dumps(payload))
     if done.returncode != 0:
         if check:
             sys.exit(f"gh api {' '.join(args)} failed: {done.stderr.strip()}")
@@ -92,9 +108,9 @@ def gh(*args, payload=None, check=True):
 
 def paged(path):
     """Every item of a paginated REST list."""
-    pages = subprocess.run(
-        ["gh", "api", "--paginate", "--slurp", path], capture_output=True, text=True, check=True
-    )
+    pages = run_gh(["gh", "api", "--paginate", "--slurp", path])
+    if pages.returncode != 0:
+        sys.exit(f"gh api {path} failed: {pages.stderr.strip()}")
     return [item for page in json.loads(pages.stdout) for item in page]
 
 
