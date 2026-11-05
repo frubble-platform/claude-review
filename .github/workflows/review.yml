@@ -25,7 +25,8 @@ jobs:
     name: Review — Cancel stale runs
     if: >-
       github.event_name == 'pull_request'
-      && (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
+      && (github.event.action != 'edited'
+        || ((github.event.changes.title || github.event.changes.body) && github.event.sender.type != 'Bot'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -69,7 +70,8 @@ jobs:
   gate:
     name: Review — Gate
     if: >-
-      (github.event.action != 'edited' || github.event.changes.title || github.event.changes.body)
+      (github.event.action != 'edited'
+        || ((github.event.changes.title || github.event.changes.body) && github.event.sender.type != 'Bot'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
