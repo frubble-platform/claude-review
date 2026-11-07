@@ -396,7 +396,8 @@ jobs:
                        and (.body | contains("<!-- claude-review-accepted -->")))] | length > 0),
                    path, line: (.line // .originalLine),
                    finding: .comments.nodes[0].body,
-                   replies: [$own | sort_by(.created_at)[] | {author: .user.login, at: .created_at, body}]}]' \
+                   replies: [$own | sort_by(.created_at)[]
+                     | {author: .user.login, association: .author_association, at: .created_at, body}]}]' \
             > "$RUNNER_TEMP/claude-review-threads.json"
           echo "findings: $(jq length "$RUNNER_TEMP/claude-review-findings.json")," \
             "threads: $(jq length "$RUNNER_TEMP/claude-review-threads.json")"
